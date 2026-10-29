@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#6CB000">
-<title>田間巡查 v0.2</title>
+<title>田間巡查 v0.3</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -855,7 +855,8 @@ textarea{width:100%;font:inherit;font-size:15px;border:1.5px solid var(--line);b
 </script>
 <script>
 "use strict";
-const VER = "田間巡查 v0.2";
+const VER = "田間巡查 v0.3";
+const POND_URL = "https://scene.moa.gov.tw/portal/sharing/servers/d33f8ec3700c4a2cb520e1911cd59fa6/rest/services/Farm/FishPond/MapServer";
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 function toast(m, ms) { const t = $("toast"); t.textContent = m; t.classList.add("on"); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("on"), ms || 2600); }
@@ -897,7 +898,15 @@ let curId = null;      // 下一筆目標
 let pkgMeta = null;
 let me = null;         // 最新 GPS {lat,lng,acc,at}
 
-const label = (p) => (p.sectUsed || p.sect) + "/" + p.landno;
+let kind = "land";      // 巡查包種類：land（地籍）／pond（魚塭）
+const label = (p) => (p.pondNo ? "魚塭 " + p.pondNo : (p.sectUsed || p.sect) + "/" + p.landno);
+function pondInfo(p) {
+  return [
+    p.area ? "面積 " + p.area + " 公頃" + (p.fadArea && String(p.fadArea) !== String(p.area) ? "（FAD " + p.fadArea + "）" : "") : "",
+    p.fish, p.members && p.members.length ? "成員 " + p.members.join("、") : "",
+    p.sect ? p.sect + " " + p.landno : "",
+  ].filter(Boolean).join("　·　");
+}
 const isDone = (id) => !!(ST[id] && ST[id].visited);
 
 /* ---------- 地圖 ---------- */
@@ -907,6 +916,15 @@ const BASES = { 航照: wmts("PHOTO2"), 地圖: wmts("EMAP") };
 let baseName = "航照";
 BASES[baseName].addTo(map);
 const sectLayer = wmts("LANDSECT", { minZoom: 15, opacity: 0.85 }).addTo(map);
+// 農業部 114 年魚塭圖（動態輸出，允許跨網域），魚塭模式時取代地籍線
+const FishPondLayer = L.TileLayer.extend({
+  getTileUrl(c) {
+    const o = 20037508.342789244, s = (2 * o) / 2 ** c.z;
+    const bb = [-o + c.x * s, o - (c.y + 1) * s, -o + (c.x + 1) * s, o - c.y * s].join(",");
+    return POND_URL + "/export?bbox=" + bb + "&bboxSR=3857&imageSR=3857&size=256,256&format=png32&transparent=true&dpi=96&f=image";
+  },
+});
+const pondLayer = new FishPondLayer("", { minZoom: 14, maxZoom: 21, crossOrigin: true });
 const parcelLayer = L.featureGroup().addTo(map);
 const routeLayer = L.layerGroup().addTo(map);
 const meLayer = L.layerGroup().addTo(map);
@@ -920,7 +938,7 @@ function styleOf(id) {
 function lblClass(id) { return "lbl" + (id === curId && !isDone(id) ? " target" : isDone(id) ? " done" : ""); }
 function lblText(p) {
   const n = order.indexOf(p.id) + 1;
-  return (isDone(p.id) ? "✓ " : n ? n + ". " : "") + label(p);
+  return (isDone(p.id) ? "✓ " : n ? n + ". " : "") + label(p) + (p.pondNo && p.owner ? "・" + p.owner : "");
 }
 
 function drawParcels() {
@@ -951,8 +969,10 @@ function refreshAll() { for (const id in shapes) refreshParcel(id); drawRoute();
 function updateLabelsVisibility() {
   const show = $("chkLbl").checked && map.getZoom() >= 16;
   $("map").classList.toggle("hide-lbl", !show);
-  if ($("chkLbl").checked) { if (!map.hasLayer(sectLayer)) sectLayer.addTo(map); }
-  else map.removeLayer(sectLayer);
+  const on = kind === "pond" ? pondLayer : sectLayer, off = kind === "pond" ? sectLayer : pondLayer;
+  map.removeLayer(off);
+  if ($("chkLbl").checked) { if (!map.hasLayer(on)) on.addTo(map); }
+  else map.removeLayer(on);
 }
 map.on("zoomend", updateLabelsVisibility);
 $("chkLbl").onchange = updateLabelsVisibility;
@@ -1023,7 +1043,8 @@ function inside(p, ll) {
 function where(p, pos) {
   if (!pos || !p.center) return "";
   const ll = [pos.lat, pos.lng];
-  return inside(p, ll) ? "位於宗地內" : "距宗地中心 " + fmtDist(haversine(ll, p.center));
+  const unit = kind === "pond" ? "魚塭" : "宗地";
+  return inside(p, ll) ? "位於" + unit + "內" : "距" + unit + "中心 " + fmtDist(haversine(ll, p.center));
 }
 function fmtDist(m) { return m < 1000 ? Math.round(m) + " 公尺" : (m / 1000).toFixed(1) + " 公里"; }
 const fmtTime = (t) => { const d = new Date(t); const p = (n) => String(n).padStart(2, "0"); return (d.getFullYear() - 1911) + "/" + p(d.getMonth() + 1) + "/" + p(d.getDate()) + " " + p(d.getHours()) + ":" + p(d.getMinutes()); };
@@ -1083,6 +1104,7 @@ async function openSheet(id) {
   $("sheetBody").innerHTML =
     "<h2>" + esc(label(p)) + "</h2>"
     + '<div class="sub">' + esc(p.county + p.town) + (n ? "　·　第 " + n + " 站" : "") + (p.note ? "　·　" + esc(p.note) : "") + (p.farmer ? "　·　" + esc(p.farmer) : "") + "</div>"
+    + (p.pondNo ? '<div class="sub">' + esc(pondInfo(p)) + "</div>" : "")
     + (p.msg ? '<div class="fix">' + esc(p.msg) + "</div>" : "")
     + '<div class="stat">' + (st.visited ? "<b>已巡查</b>　" + fmtTime(st.at) + (st.lat ? "　" + esc(where(p, st)) : "") : "尚未巡查")
     + (me ? '<br><span style="color:var(--ink2);font-size:14px">目前：' + esc(where(p, me) || "無座標") + "（定位誤差 ±" + me.acc + " 公尺）</span>" : "") + "</div>"
@@ -1167,7 +1189,7 @@ $("q").oninput = () => {
   const q = $("q").value.trim();
   const h = $("hits");
   if (!q) { h.innerHTML = ""; return; }
-  const list = P.filter((p) => (label(p) + p.sect + p.note + p.farmer).includes(q)).slice(0, 30);
+  const list = P.filter((p) => (label(p) + p.sect + p.note + p.farmer + (p.members || []).join("")).includes(q)).slice(0, 30);
   h.innerHTML = list.length ? list.map((p) => '<div data-id="' + p.id + '">' + esc(label(p)) + (p.note ? "　" + esc(p.note) : "") + (p.status === "fail" ? "（查無宗界）" : "") + "</div>").join("") : "<div>找不到符合的地號</div>";
 };
 $("hits").onclick = (e) => {
@@ -1276,6 +1298,12 @@ async function mapSnapshot(p, st, W, H) {
     for (let ty = Math.floor(oy / 256); ty <= Math.floor((oy + H) / 256); ty++)
       jobs.push(loadImg("https://wmts.nlsc.gov.tw/wmts/PHOTO2/default/GoogleMapsCompatible/" + z + "/" + ty + "/" + tx).then((im) => im && g.drawImage(im, tx * 256 - ox, ty * 256 - oy)));
   await Promise.all(jobs);
+  if (kind === "pond") {               // 疊上周邊魚塭邊界
+    const res = (2 * 20037508.342789244) / (256 * 2 ** z), o = 20037508.342789244;
+    const bb = [ox * res - o, o - (oy + H) * res, (ox + W) * res - o, o - oy * res].join(",");
+    const im = await loadImg(POND_URL + "/export?bbox=" + bb + "&bboxSR=3857&imageSR=3857&size=" + W + "," + H + "&format=png32&transparent=true&dpi=96&f=image");
+    if (im) g.drawImage(im, 0, 0, W, H);
+  }
   const toC = (ll) => { const q = px(ll[0], ll[1], z); return [q[0] - ox, q[1] - oy]; };
   g.beginPath();
   if (p.status === "ok") p.rings.forEach((ring) => ring.forEach((ll, i) => { const q = toC(ll); i ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1]); }) || g.closePath());
@@ -1337,13 +1365,13 @@ async function summaryPages(list) {
       "共 " + P.length + " 筆，已巡查 " + done + " 筆，照片 " + Object.values(PH).reduce((a, b) => a + b, 0) + " 張",
     ], "總表 " + (s / rowsPer + 1));
     y += 10;
-    const cols = [[M, "序"], [M + 60, "地段／地號"], [M + 430, "業者／備註"], [M + 730, "狀態"], [M + 840, "巡查時間"], [M + 1040, "照片"]];
+    const cols = [[M, "序"], [M + 60, kind === "pond" ? "魚塭" : "地段／地號"], [M + 430, kind === "pond" ? "經營者／案號" : "業者／備註"], [M + 730, "狀態"], [M + 840, "巡查時間"], [M + 1040, "照片"]];
     g.fillStyle = "#EEF1EC"; g.fillRect(M, y - 30, PW - 2 * M, 42);
     g.fillStyle = "#222"; g.font = "600 22px sans-serif"; cols.forEach(([x, t]) => g.fillText(t, x + 6, y));
     y += 44; g.font = "21px sans-serif";
     list.slice(s, s + rowsPer).forEach((p, k) => {
       const st = ST[p.id] || {};
-      const vals = [String(s + k + 1), label(p), p.note || p.farmer || "", st.visited ? "已巡查" : p.status === "fail" ? "查無宗界" : "未巡查", st.visited ? fmtTime(st.at) : "", String(PH[p.id] || 0)];
+      const vals = [String(s + k + 1), label(p), p.pondNo ? p.owner + "　" + p.caseNo : p.note || p.farmer || "", st.visited ? "已巡查" : p.status === "fail" ? "查無宗界" : "未巡查", st.visited ? fmtTime(st.at) : "", String(PH[p.id] || 0)];
       g.fillStyle = st.visited ? "#222" : "#999";
       cols.forEach(([x], i) => { let v = vals[i]; const max = (cols[i + 1] ? cols[i + 1][0] : PW - M) - x - 12; while (g.measureText(v).width > max && v.length > 1) v = v.slice(0, -2) + "…"; g.fillText(v, x + 6, y); });
       g.strokeStyle = "#E3E6E1"; g.beginPath(); g.moveTo(M, y + 12); g.lineTo(PW - M, y + 12); g.stroke();
@@ -1365,6 +1393,7 @@ async function parcelPages(p, idx) {
     const [c, g] = newPage();
     const info = pg ? [] : [
       p.county + p.town + "　" + label(p) + (p.note ? "　·　" + p.note : "") + (p.farmer ? "　·　" + p.farmer : ""),
+      p.pondNo ? pondInfo(p) : "",
       st.visited ? "巡查：" + fmtTime(st.at) + (st.lat ? "　GPS " + st.lat.toFixed(6) + ", " + st.lng.toFixed(6) + "（±" + st.acc + "m）　" + where(p, st) : "　（未記錄 GPS）") : "尚未巡查",
       st.note ? "備註：" + st.note : "",
       p.msg ? "說明：" + p.msg : "",
@@ -1448,6 +1477,10 @@ async function load() {
   const pkg = await kvGet("pkg");
   P = pkg ? pkg.parcels : [];
   pkgMeta = pkg ? { source: pkg.source, created: pkg.created } : null;
+  kind = pkg && pkg.kind === "pond" ? "pond" : "land";
+  document.querySelector("header h1").textContent = kind === "pond" ? "魚塭巡查" : "田間巡查";
+  document.querySelector(".chk").lastChild.nodeValue = kind === "pond" ? "顯示魚塭圖" : "顯示地段地號";
+  $("q").placeholder = kind === "pond" ? "搜尋魚塭編號、經營者或案號" : "搜尋地段、地號或業者";
   byId = {}; P.forEach((p) => (byId[p.id] = p));
   order = ((await kvGet("order")) || P.map((p) => p.id)).filter((id) => byId[id]);
   P.forEach((p) => { if (!order.includes(p.id)) order.push(p.id); });

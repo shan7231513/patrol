@@ -1,5 +1,5 @@
-// 田間巡查離線快取：網頁本身先用快取、背景更新；航照與地籍圖磚看過的會留著，沒訊號時仍可顯示。
-const APP = "patrol-app-v2";
+// 田間巡查離線快取：網頁本身先用快取、背景更新；航照、地籍與魚塭圖磚看過的會留著，沒訊號時仍可顯示。
+const APP = "patrol-app-v3";
 const TILES = "patrol-tiles-v1";
 const TILE_MAX = 4000;
 const APP_FILES = ["./", "index.html", "manifest.webmanifest", "icon-192.png", "icon-512.png"];
@@ -26,7 +26,7 @@ self.addEventListener("fetch", (e) => {
   const url = new URL(e.request.url);
   if (e.request.method !== "GET") return;
 
-  if (url.hostname === "wmts.nlsc.gov.tw") {
+  if (url.hostname === "wmts.nlsc.gov.tw" || (url.hostname === "scene.moa.gov.tw" && url.pathname.includes("/FishPond/MapServer/export"))) {
     e.respondWith(
       caches.open(TILES).then(async (c) => {
         const hit = await c.match(e.request);
