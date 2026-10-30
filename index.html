@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#6CB000">
-<title>田間巡查 v0.3</title>
+<title>田間巡查 v0.4</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -771,6 +771,20 @@ textarea{width:100%;font:inherit;font-size:15px;border:1.5px solid var(--line);b
 #busy{position:fixed;z-index:1400;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center}
 #busy.on{display:flex}
 #busy div{background:#fff;border-radius:10px;padding:18px 22px;font-size:16px;min-width:220px;text-align:center}
+/* 內建相機 */
+#cam{position:fixed;z-index:1350;inset:0;background:#000;display:none}
+#cam.on{display:block}
+#cam video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+#cam .top{position:absolute;left:0;right:0;top:0;padding:calc(10px + env(safe-area-inset-top)) 14px 10px;background:linear-gradient(rgba(0,0,0,.65),transparent);color:#fff;font-size:16px;display:flex;justify-content:space-between;gap:10px}
+#cam .top b{font-size:17px}
+#cam .bar{position:absolute;left:0;right:0;bottom:0;padding:16px 20px calc(22px + env(safe-area-inset-bottom));background:linear-gradient(transparent,rgba(0,0,0,.7));display:flex;align-items:center;justify-content:space-between}
+#camLast{width:58px;height:58px;border-radius:8px;border:2px solid #fff;background:#333 center/cover no-repeat}
+#camShot{width:80px;height:80px;border-radius:50%;border:5px solid #fff;background:rgba(255,255,255,.35);padding:0}
+#camShot:active{background:#fff}
+#camShot.busy{opacity:.5}
+#camDone{min-width:72px;height:48px;border:0;border-radius:24px;background:var(--g);color:#fff;font-size:17px;font-weight:700}
+#camFlash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;transition:opacity .25s}
+#camFlash.on{opacity:.7;transition:none}
 .toast{position:fixed;z-index:1500;left:50%;bottom:90px;transform:translateX(-50%);background:#222;color:#fff;padding:10px 16px;border-radius:20px;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90vw;text-align:center}
 .toast.on{opacity:.95}
 </style>
@@ -834,11 +848,23 @@ textarea{width:100%;font:inherit;font-size:15px;border:1.5px solid var(--line);b
       <p>清除已巡查標記、備註與照片，保留巡查包與路線順序。不可復原。</p>
       <button class="btn warn" id="btnWipe">清除巡查紀錄與照片</button>
     </div>
+    <div class="card">
+      <h4>照片備份</h4>
+      <p>網頁裡的照片存在瀏覽器資料中，清除瀏覽器資料或移除程式會消失。開啟備份後，每拍一張就同時下載一份到手機的「下載」資料夾（Download），檔名含地號／魚塭編號與時間。第一次可能會詢問是否允許下載多個檔案，請按允許。</p>
+      <label><input type="checkbox" id="chkBackup">拍照時同時下載備份到手機</label>
+      <button class="btn sec" id="btnBackupAll">把全部照片下載到手機</button>
+    </div>
     <div class="card"><h4>版本</h4><p id="verInfo" style="margin:0"></p></div>
   </div>
 </section>
 
 <div id="viewer"><img alt=""></div>
+<div id="cam">
+  <video id="camV" autoplay playsinline muted></video>
+  <div class="top"><b id="camTitle"></b><span id="camCount"></span></div>
+  <div id="camFlash"></div>
+  <div class="bar"><div id="camLast"></div><button id="camShot" aria-label="快門"></button><button id="camDone">完成</button></div>
+</div>
 <div id="busy"><div id="busyTxt">處理中…</div></div>
 <div class="toast" id="toast"></div>
 <input type="file" id="fCam" accept="image/*" capture="environment" hidden>
@@ -855,7 +881,7 @@ textarea{width:100%;font:inherit;font-size:15px;border:1.5px solid var(--line);b
 </script>
 <script>
 "use strict";
-const VER = "田間巡查 v0.3";
+const VER = "田間巡查 v0.4";
 const POND_URL = "https://scene.moa.gov.tw/portal/sharing/servers/d33f8ec3700c4a2cb520e1911cd59fa6/rest/services/Farm/FishPond/MapServer";
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -1124,7 +1150,7 @@ async function openSheet(id) {
     x.onclick = async (e) => { e.stopPropagation(); if (!confirm("刪除這張照片？")) return; await tx("photos", "readwrite", (s) => s.delete(ph.id)); PH[id] = Math.max(0, (PH[id] || 1) - 1); openSheet(id); };
     d.appendChild(x); th.appendChild(d);
   });
-  $("sCam").onclick = () => $("fCam").click();
+  $("sCam").onclick = () => openCam(id);
   $("sPick").onclick = () => $("fPick").click();
   $("sDone").onclick = () => toggleDone(id);
   $("sNav").onclick = () => navTo(p);
@@ -1183,6 +1209,139 @@ async function addPhotos(files) {
 }
 $("fCam").onchange = (e) => { addPhotos([...e.target.files]); e.target.value = ""; };
 $("fPick").onchange = (e) => { addPhotos([...e.target.files]); e.target.value = ""; };
+
+/* ---------- 內建相機 ----------
+   不呼叫系統相機：系統相機在前景時 Android 常把 Chrome 關掉，回來網頁重載，照片就接不回來
+   （v0.3 實機約 50 張只存到一部分）。改用 getUserMedia 在網頁內取景，按快門當下擷取畫面、
+   立即存進 IndexedDB，不需確認，可連拍。 */
+let backupOn = true;
+let cam = null;                       // { pid, stream, n, pending, queue, wake }
+const CAM_LONG = 2048;                // 擷取畫面的長邊上限：備份用這個尺寸，存進程式的縮到 1600
+const CAM_QUEUE = 8;                  // 最多 8 張排隊處理，超過才暫停快門（每張約 12 MB 記憶體）
+function fname(s) { return String(s).replace(/[\/:*?"<>|\s]+/g, "-"); }
+function stamp(t) { const d = new Date(t), p = (n) => String(n).padStart(2, "0"); return d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + "_" + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds()); }
+function download(blob, name) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 30000);
+}
+function backupName(p, at, n) {
+  return fname("巡查_" + label(p) + (p.owner ? "_" + p.owner : "") + "_" + stamp(at) + "_" + n) + ".jpg";
+}
+function canvasBlob(c, long, q) {
+  const k = Math.min(1, long / Math.max(c.width, c.height));
+  let src = c;
+  if (k < 1) { src = document.createElement("canvas"); src.width = Math.round(c.width * k); src.height = Math.round(c.height * k); src.getContext("2d").drawImage(c, 0, 0, src.width, src.height); }
+  return new Promise((ok) => src.toBlob(ok, "image/jpeg", q));
+}
+async function savePhoto(pid, blob, at, pos, small) {
+  small = small || await shrink(blob);
+  await tx("photos", "readwrite", (s) => s.add({ pid, blob: small, at, lat: pos ? pos.lat : null, lng: pos ? pos.lng : null }));
+  PH[pid] = (PH[pid] || 0) + 1;
+  if (backupOn) download(blob, backupName(byId[pid], at, PH[pid]));
+}
+async function openCam(id) {
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: "environment" }, width: { ideal: 3840 }, height: { ideal: 2160 } } });
+  } catch (e) {
+    toast("無法開啟內建相機（" + e.message + "），改用系統相機", 5000);
+    $("fCam").click();
+    return;
+  }
+  cam = { pid: id, stream, n: 0, pending: 0, queue: Promise.resolve(), wake: null };
+  $("camV").srcObject = stream;
+  $("camLast").style.backgroundImage = "";
+  $("camTitle").textContent = label(byId[id]);
+  camUI();
+  $("cam").classList.add("on");
+  try { cam.wake = await navigator.wakeLock.request("screen"); } catch (e) {}
+}
+function camUI() {
+  if (!cam) return;
+  $("camCount").textContent = "已存 " + cam.n + " 張" + (cam.pending ? "（處理中 " + cam.pending + "）" : "");
+  $("camShot").classList.toggle("busy", cam.pending >= CAM_QUEUE);
+}
+$("camShot").onclick = () => {
+  if (!cam) return;
+  const v = $("camV");
+  if (!v.videoWidth) { toast("相機還沒準備好"); return; }
+  if (cam.pending >= CAM_QUEUE) { toast("照片處理中，請稍候"); return; }
+  // 按下當下就擷取畫面，之後的壓縮與存檔排隊進行，不擋下一張
+  const k = Math.min(1, CAM_LONG / Math.max(v.videoWidth, v.videoHeight));
+  const c = document.createElement("canvas");
+  c.width = Math.round(v.videoWidth * k); c.height = Math.round(v.videoHeight * k);
+  c.getContext("2d").drawImage(v, 0, 0, c.width, c.height);
+  const f = $("camFlash"); f.classList.add("on"); requestAnimationFrame(() => requestAnimationFrame(() => f.classList.remove("on")));
+  if (navigator.vibrate) navigator.vibrate(30);
+  const job = { pid: cam.pid, at: Date.now(), pos: me ? Object.assign({}, me) : null };
+  const cur = cam;
+  cur.pending++; camUI();
+  cur.queue = cur.queue.then(async () => {
+    try {
+      // 直接從擷取的畫面產生兩個版本，不必再解碼一次
+      const small = await canvasBlob(c, 1600, 0.82);
+      const blob = backupOn ? await canvasBlob(c, CAM_LONG, 0.9) : small;
+      await savePhoto(job.pid, blob, job.at, job.pos, small);
+      cur.n++;
+      $("camLast").style.backgroundImage = "url(" + URL.createObjectURL(small) + ")";
+    } catch (e) { toast("照片儲存失敗：" + e.message, 6000); }
+    cur.pending--; camUI();
+  });
+};
+async function closeCam() {
+  if (!cam) return;
+  const cur = cam;
+  $("camDone").disabled = true;
+  await cur.queue;                    // 等排隊中的照片存完
+  cur.stream.getTracks().forEach((tr) => tr.stop());
+  if (cur.wake) cur.wake.release().catch(() => {});
+  $("camV").srcObject = null;
+  $("cam").classList.remove("on");
+  $("camDone").disabled = false;
+  cam = null;
+  if (cur.n) {
+    if (!isDone(cur.pid)) { await markDone(cur.pid); pickNext(); refreshAll(); }
+    toast("已存 " + cur.n + " 張照片到 " + label(byId[cur.pid]));
+  }
+  openSheet(cur.pid);
+}
+$("camDone").onclick = closeCam;
+$("chkBackup").onchange = (e) => { backupOn = e.target.checked; kvSet("backup", backupOn); };
+$("btnBackupAll").onclick = async () => {
+  const all = await tx("photos", "readonly", (s) => s.getAll());
+  if (!all.length) { toast("沒有照片"); return; }
+  if (!confirm("下載全部 " + all.length + " 張照片到手機的「下載」資料夾？")) return;
+  const cnt = {};
+  for (const ph of all.sort((a, b) => a.at - b.at)) {
+    const p = byId[ph.pid]; if (!p) continue;
+    cnt[ph.pid] = (cnt[ph.pid] || 0) + 1;
+    download(ph.blob, backupName(p, ph.at, cnt[ph.pid]));
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  toast("已下載 " + all.length + " 張");
+};
+
+/* ---------- 返回鍵 ----------
+   Chrome 會略過「沒有使用者操作就加入」的歷史紀錄，所以在使用者觸控畫面時才放一筆攔截用的紀錄。
+   按返回：先關閉相機／照片／面板／資訊卡；都沒有開時詢問是否離開。 */
+let trapArmed = false;
+function armTrap() { if (!trapArmed) { history.pushState({ patrolTrap: 1 }, ""); trapArmed = true; } }
+document.addEventListener("pointerdown", armTrap, true);
+window.addEventListener("popstate", () => {
+  trapArmed = false;
+  if (cam) { closeCam(); armTrap(); return; }
+  if ($("viewer").classList.contains("on")) { $("viewer").classList.remove("on"); armTrap(); return; }
+  const panel = document.querySelector(".panel.on");
+  if (panel) { panel.classList.remove("on"); armTrap(); return; }
+  if ($("sheet").classList.contains("on")) { closeSheet(); armTrap(); return; }
+  if (confirm("確定要離開巡查程式嗎？")) {
+    history.back();
+    // 從主畫面開啟時已經沒有上一頁，history.back() 不會有反應
+    setTimeout(() => toast("再按一次返回鍵即可離開"), 400);
+  } else armTrap();
+});
 
 /* ---------- 搜尋 ---------- */
 $("q").oninput = () => {
@@ -1489,6 +1648,9 @@ async function load() {
   PH = {};
   await tx("photos", "readonly", (s) => { const r = s.index("pid").openKeyCursor(); r.onsuccess = () => { const c = r.result; if (c) { PH[c.key] = (PH[c.key] || 0) + 1; c.continue(); } }; });
   curId = await kvGet("cur");
+  const b = await kvGet("backup");
+  backupOn = b === undefined ? true : !!b;
+  $("chkBackup").checked = backupOn;
   if (!curId || isDone(curId) || !byId[curId]) pickNext();
   drawParcels(); refreshAll();
 }

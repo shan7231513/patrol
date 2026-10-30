@@ -1,5 +1,5 @@
 // 田間巡查離線快取：網頁本身先用快取、背景更新；航照、地籍與魚塭圖磚看過的會留著，沒訊號時仍可顯示。
-const APP = "patrol-app-v3";
+const APP = "patrol-app-v4";
 const TILES = "patrol-tiles-v1";
 const TILE_MAX = 4000;
 const APP_FILES = ["./", "index.html", "manifest.webmanifest", "icon-192.png", "icon-512.png"];
