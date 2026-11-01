@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#6CB000">
-<title>田間巡查 v0.4</title>
+<title>田間巡查 v0.4.1</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -881,7 +881,7 @@ textarea{width:100%;font:inherit;font-size:15px;border:1.5px solid var(--line);b
 </script>
 <script>
 "use strict";
-const VER = "田間巡查 v0.4";
+const VER = "田間巡查 v0.4.1";
 const POND_URL = "https://scene.moa.gov.tw/portal/sharing/servers/d33f8ec3700c4a2cb520e1911cd59fa6/rest/services/Farm/FishPond/MapServer";
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -1241,13 +1241,32 @@ async function savePhoto(pid, blob, at, pos, small) {
   PH[pid] = (PH[pid] || 0) + 1;
   if (backupOn) download(blob, backupName(byId[pid], at, PH[pid]));
 }
+// 開不了相機時不再自動改叫系統相機：Chrome 沒有相機權限時 capture 也會退成「選取檔案」，
+// 使用者只會看到檔案選單、不知道原因。改成說明原因與開啟權限的步驟。
+const CAM_HELP = {
+  NotAllowedError: "相機權限被拒絕。\n\n請依序確認：\n1. 手機「設定 → 應用程式 → Chrome → 權限 → 相機」設為「使用應用程式時允許」。\n2. 用 Chrome 開啟本網頁，點網址列左邊的圖示 → 權限（或網站設定）→ 相機 → 允許。\n3. 關掉巡查網頁再重新開啟，按「拍照」時若詢問相機權限請按允許。",
+  NotReadableError: "相機正被其他程式使用。請關閉相機、視訊通話等程式後再按一次「拍照」。",
+  NotFoundError: "找不到可用的相機。",
+  SecurityError: "瀏覽器不允許這個頁面使用相機。請用 Chrome 開啟 https://shan7231513.github.io/patrol/",
+};
+async function getCamStream() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    const e = new Error("此瀏覽器不支援網頁相機"); e.name = "SecurityError"; throw e;
+  }
+  try {
+    return await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: "environment" }, width: { ideal: 3840 }, height: { ideal: 2160 } } });
+  } catch (e) {
+    if (e.name === "NotAllowedError" || e.name === "SecurityError") throw e;
+    // 部分手機不接受高解析度的要求，改用最基本的條件再試一次
+    return await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: "environment" } });
+  }
+}
 async function openCam(id) {
   let stream;
   try {
-    stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: "environment" }, width: { ideal: 3840 }, height: { ideal: 2160 } } });
+    stream = await getCamStream();
   } catch (e) {
-    toast("無法開啟內建相機（" + e.message + "），改用系統相機", 5000);
-    $("fCam").click();
+    alert("無法開啟相機（" + e.name + "：" + e.message + "）\n\n" + (CAM_HELP[e.name] || "請關掉巡查網頁重新開啟後再試。") + "\n\n暫時可以用手機相機拍照，再按「從相簿選」加入。");
     return;
   }
   cam = { pid: id, stream, n: 0, pending: 0, queue: Promise.resolve(), wake: null };
