@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#6CB000">
-<title>田間巡查 v0.6</title>
+<title>田間巡查 v0.6.1</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -880,6 +880,11 @@ textarea{width:100%;font:inherit;font-size:15px;border:1.5px solid var(--line);b
       <label><input type="checkbox" id="chkBackup">拍照時同時下載備份到手機</label>
       <button class="btn sec" id="btnBackupAll">把全部照片下載到手機</button>
     </div>
+    <div class="card">
+      <h4>巡查包產生器（電腦版）</h4>
+      <p>巡查包要在 Windows 電腦上產生（國土測繪中心的地號查詢不接受手機網頁直接查）。下載解壓縮後，把農務e把抓的耕地匯入檔 xlsx 拖曳到「巡查包產生器.exe」上，完成後把產生的巡查包_*.json 傳到手機，在上方「選擇巡查包」匯入。不需要安裝 Python。</p>
+      <a class="btn sec" href="https://github.com/shan7231513/patrol/releases/latest/download/patrol-generator.zip" style="display:flex;align-items:center;justify-content:center;text-decoration:none">下載巡查包產生器（約 38 MB）</a>
+    </div>
     <div class="card"><h4>版本</h4><p id="verInfo" style="margin:0"></p></div>
   </div>
 </section>
@@ -907,7 +912,7 @@ textarea{width:100%;font:inherit;font-size:15px;border:1.5px solid var(--line);b
 </script>
 <script>
 "use strict";
-const VER = "田間巡查 v0.6";
+const VER = "田間巡查 v0.6.1";
 const POND_URL = "https://scene.moa.gov.tw/portal/sharing/servers/d33f8ec3700c4a2cb520e1911cd59fa6/rest/services/Farm/FishPond/MapServer";
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
