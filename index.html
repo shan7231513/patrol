@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#6CB000">
-<title>田間巡查 v0.5</title>
+<title>田間巡查 v0.6</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -699,6 +699,18 @@ header .ib svg{width:26px;height:26px}
 #fabLoc{top:calc(64px + env(safe-area-inset-top))}
 #fabBase{top:calc(124px + env(safe-area-inset-top));font-size:13px;font-weight:700}
 #fabRoute{top:calc(184px + env(safe-area-inset-top))}
+#fabBatch{top:calc(244px + env(safe-area-inset-top));font-size:13px;font-weight:700}
+#progress{cursor:pointer}
+.batch{display:flex;align-items:center;gap:8px;padding:9px 0;border-top:1px solid var(--line)}
+.batch:first-of-type{border-top:0}
+.batch .sw{width:16px;height:16px;border-radius:4px;flex:none}
+.batch .tx{flex:1;font-size:15px;line-height:1.35}
+.batch .tx small{display:block;color:var(--ink2);font-size:12.5px}
+.batch button{height:34px;padding:0 10px;border:1.5px solid var(--g);background:#fff;color:var(--g-d);border-radius:6px;font-weight:600;font-size:14px}
+.batch button.on{background:var(--g);color:#fff}
+.batch button.x{border-color:#bbb;color:#777}
+.badge.b{color:#fff}
+.hidnote{font-size:13.5px;color:var(--ink2);text-align:center;padding:8px 0 4px}
 .chk{position:fixed;z-index:900;left:10px;bottom:calc(76px + env(safe-area-inset-bottom));background:rgba(255,255,255,.85);
   padding:6px 10px;display:flex;align-items:center;gap:8px;font-size:15px;border-radius:2px}
 .chk input{width:22px;height:22px;accent-color:#2E9E77}
@@ -805,6 +817,7 @@ textarea{width:100%;font:inherit;font-size:15px;border:1.5px solid var(--line);b
 <button class="fab" id="fabLoc" aria-label="定位"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm8.9 3A9 9 0 0 0 13 3.1V1h-2v2.1A9 9 0 0 0 3.1 11H1v2h2.1A9 9 0 0 0 11 20.9V23h2v-2.1a9 9 0 0 0 7.9-7.9H23v-2zM12 19a7 7 0 1 1 0-14 7 7 0 0 1 0 14z"/></svg></button>
 <button class="fab" id="fabBase" aria-label="切換底圖">航照</button>
 <button class="fab on" id="fabRoute" aria-label="顯示路線"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 3a3 3 0 0 0-1 5.8V15a5 5 0 0 0 5 5h4.2A3 3 0 1 0 14.2 18H10a3 3 0 0 1-3-3V8.8A3 3 0 0 0 6 3zm12 0a3 3 0 0 0-3 3c0 2.2 3 6 3 6s3-3.8 3-6a3 3 0 0 0-3-3z"/></svg></button>
+<button class="fab" id="fabBatch" aria-label="分批隱藏">批次</button>
 <label class="chk"><input type="checkbox" id="chkLbl" checked>顯示地段地號</label>
 <div id="progress"></div>
 
@@ -818,6 +831,12 @@ textarea{width:100%;font:inherit;font-size:15px;border:1.5px solid var(--line);b
 <section class="panel" id="pList">
   <div class="hd"><button class="ib" data-close>‹ 返回</button><h3>巡查清單與路線</h3></div>
   <div class="bd">
+    <div class="card" id="batchCard">
+      <h4>分批隱藏已巡查</h4>
+      <p>把目前已巡查、還沒分批的土地收成一批並從地圖隱藏，方便規劃剩下的。每一批可以隨時再顯示出來確認或補資料。</p>
+      <button class="btn" id="btnBatch">收成新批次</button>
+      <div id="batchList"></div>
+    </div>
     <div class="tools">
       <button id="btnAuto">從目前位置自動排序</button>
       <button id="btnOnlyTodo">只看未巡查</button>
@@ -837,11 +856,18 @@ textarea{width:100%;font:inherit;font-size:15px;border:1.5px solid var(--line);b
       <p id="pkgInfo" style="margin:10px 0 0"></p>
     </div>
     <div class="card">
-      <h4>匯出巡查紀錄 PDF</h4>
-      <p>第一頁為總表；之後每筆土地一頁，左上為宗界圖（航照＋宗界＋巡查位置），其餘三格為現場照片，超過 3 張續頁。產生宗界圖需要網路。</p>
+      <h4>匯出巡查紀錄</h4>
+      <p><b>PDF</b>：第一頁為總表；之後每筆土地一頁，左上為宗界圖（衛星圖＋宗界＋巡查位置），其餘三格為現場照片，超過 3 張續頁。產生宗界圖需要網路。<br><b>Excel</b>：每筆一列，含批次、巡查時間、GPS 座標、距中心距離、照片數與備註，方便計算。</p>
       <label><input type="radio" name="rng" value="done" checked>只匯出已巡查</label>
       <label><input type="radio" name="rng" value="all">全部（未巡查也列出）</label>
-      <button class="btn" id="btnPdf">產生 PDF</button>
+      <p style="margin:10px 0 0"><b>PDF 顯示內容</b></p>
+      <label><input type="checkbox" id="optTime" checked>巡查日期／時間</label>
+      <label><input type="checkbox" id="optPos" checked>定位位置（GPS 座標、距中心距離、地圖藍點）</label>
+      <label><input type="checkbox" id="optNote" checked>備註（匯入備註與巡查備註）</label>
+      <div class="row" style="display:flex;gap:8px;margin-top:8px">
+        <button class="btn" id="btnPdf" style="flex:1">產生 PDF</button>
+        <button class="btn" id="btnXlsx" style="flex:1">產生 Excel</button>
+      </div>
     </div>
     <div class="card">
       <h4>清除巡查紀錄</h4>
@@ -881,7 +907,7 @@ textarea{width:100%;font:inherit;font-size:15px;border:1.5px solid var(--line);b
 </script>
 <script>
 "use strict";
-const VER = "田間巡查 v0.5";
+const VER = "田間巡查 v0.6";
 const POND_URL = "https://scene.moa.gov.tw/portal/sharing/servers/d33f8ec3700c4a2cb520e1911cd59fa6/rest/services/Farm/FishPond/MapServer";
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -923,6 +949,11 @@ let order = [];        // 巡查順序（id）
 let curId = null;      // 下一筆目標
 let pkgMeta = null;
 let me = null;         // 最新 GPS {lat,lng,acc,at}
+let BATCH = [];        // 分批：[{n, at, ids, hidden}]
+let batchOf = {};      // id → 所屬批次
+const BATCH_COLORS = ["#7E57C2", "#0097A7", "#F4511E", "#3949AB", "#AFB42B", "#8D6E63", "#D81B60", "#00897B"];
+const batchColor = (b) => BATCH_COLORS[(b.n - 1) % BATCH_COLORS.length];
+const isHidden = (id) => !!(batchOf[id] && batchOf[id].hidden);
 
 let kind = "land";      // 巡查包種類：land（地籍）／pond（魚塭）
 const label = (p) => (p.pondNo ? "魚塭 " + p.pondNo : (p.sectUsed || p.sect) + "/" + p.landno);
@@ -940,8 +971,9 @@ const map = L.map("map", { zoomControl: false, attributionControl: false, maxZoo
 const wmts = (layer, ext) => L.tileLayer("https://wmts.nlsc.gov.tw/wmts/" + layer + "/default/GoogleMapsCompatible/{z}/{y}/{x}", Object.assign({ maxNativeZoom: 19, maxZoom: 21, crossOrigin: true }, ext));
 // 國土測繪中心航照部分地區只到 2023 年（新開的道路看不到），預設改用較新的 Esri 衛星影像，航照保留可切換
 const ESRI = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
+const ESRI_MAXZ = 18;      // Esri 在台灣鄉間只到 z18，z19 會回「Map data not yet available」
 const BASES = {
-  衛星: L.tileLayer(ESRI, { maxNativeZoom: 19, maxZoom: 21, crossOrigin: true, attribution: "Esri, Maxar, Earthstar Geographics" }),
+  衛星: L.tileLayer(ESRI, { maxNativeZoom: 18, maxZoom: 21, crossOrigin: true, attribution: "Esri, Maxar, Earthstar Geographics" }),
   航照: wmts("PHOTO2", { attribution: "國土測繪中心" }),
   地圖: wmts("EMAP", { attribution: "國土測繪中心" }),
 };
@@ -968,13 +1000,13 @@ const shapes = {};     // id → L.Polygon / L.Rectangle
 
 function styleOf(id) {
   if (id === curId && !isDone(id)) return { color: "#FF8A00", weight: 4, fillColor: "#ffffff", fillOpacity: 0.45 };
-  if (isDone(id)) return { color: "#ffffff", weight: 2, fillColor: "#2E9E44", fillOpacity: 0.5 };
+  if (isDone(id)) return { color: "#ffffff", weight: 2, fillColor: batchOf[id] ? batchColor(batchOf[id]) : "#2E9E44", fillOpacity: 0.5 };
   return { color: "#ffffff", weight: 2, fillColor: "#ffffff", fillOpacity: 0.45 };
 }
 function lblClass(id) { return "lbl" + (id === curId && !isDone(id) ? " target" : isDone(id) ? " done" : ""); }
 function lblText(p) {
   const n = order.indexOf(p.id) + 1;
-  return (isDone(p.id) ? "✓ " : n ? n + ". " : "") + label(p) + (p.pondNo && p.owner ? "・" + p.owner : "");
+  return (isDone(p.id) ? (batchOf[p.id] ? "第" + batchOf[p.id].n + "批 ✓ " : "✓ ") : n ? n + ". " : "") + label(p) + (p.pondNo && p.owner ? "・" + p.owner : "");
 }
 
 function drawParcels() {
@@ -987,7 +1019,7 @@ function drawParcels() {
     else continue;
     s.bindTooltip(lblText(p), { permanent: true, direction: "center", className: lblClass(p.id), interactive: false });
     s.on("click", () => openSheet(p.id));
-    s.addTo(parcelLayer);
+    if (!isHidden(p.id)) s.addTo(parcelLayer);
     shapes[p.id] = s;
   }
   updateLabelsVisibility();
@@ -1000,7 +1032,15 @@ function refreshParcel(id) {
   if (t._container) t._container.className = "leaflet-tooltip leaflet-zoom-animated leaflet-tooltip-center " + lblClass(id);
   t.options.className = lblClass(id);
 }
-function refreshAll() { for (const id in shapes) refreshParcel(id); drawRoute(); updateProgress(); }
+function refreshAll() {
+  for (const id in shapes) {
+    const on = parcelLayer.hasLayer(shapes[id]);
+    if (isHidden(id) && on) parcelLayer.removeLayer(shapes[id]);
+    else if (!isHidden(id) && !on) shapes[id].addTo(parcelLayer);
+    refreshParcel(id);
+  }
+  drawRoute(); updateProgress();
+}
 
 function updateLabelsVisibility() {
   const show = $("chkLbl").checked && map.getZoom() >= 16;
@@ -1032,7 +1072,8 @@ function drawRoute() {
 }
 function updateProgress() {
   const n = P.length, d = P.filter((p) => isDone(p.id)).length;
-  $("progress").textContent = n ? "已巡查 " + d + " / " + n : "尚未匯入巡查包";
+  const h = P.filter((p) => isHidden(p.id)).length;
+  $("progress").textContent = n ? "已巡查 " + d + " / " + n + (h ? "・隱藏 " + h : "") : "尚未匯入巡查包";
 }
 
 /* ---------- GPS ---------- */
@@ -1143,6 +1184,7 @@ async function openSheet(id) {
     + '<div class="sub">' + esc(p.county + p.town) + (n ? "　·　第 " + n + " 站" : "") + (p.note ? "　·　" + esc(p.note) : "") + (p.farmer ? "　·　" + esc(p.farmer) : "") + "</div>"
     + (p.pondNo ? '<div class="sub">' + esc(pondInfo(p)) + "</div>" : "")
     + (p.msg ? '<div class="fix">' + esc(p.msg) + "</div>" : "")
+    + (batchOf[id] ? '<div class="sub">第 ' + batchOf[id].n + " 批" + (batchOf[id].hidden ? "（地圖上已隱藏）" : "") + "</div>" : "")
     + '<div class="stat">' + (st.visited ? "<b>已巡查</b>　" + fmtTime(st.at) + (st.lat ? "　" + esc(where(p, st)) : "") : "尚未巡查")
     + (me ? '<br><span style="color:var(--ink2);font-size:14px">目前：' + esc(where(p, me) || "無座標") + "（定位誤差 ±" + me.acc + " 公尺）</span>" : "") + "</div>"
     + '<div class="row"><button class="btn" id="sCam">拍照</button><button class="btn sec" id="sPick">從相簿選</button></div>'
@@ -1181,6 +1223,7 @@ async function toggleDone(id) {
   if (isDone(id)) {
     if (!confirm("取消這筆的已巡查標記？（照片會保留）")) return;
     await saveState(id, { visited: false });
+    await leaveBatch(id);
   } else await markDone(id);
   pickNext(); refreshAll(); openSheet(id);
 }
@@ -1379,7 +1422,7 @@ $("q").oninput = () => {
   const h = $("hits");
   if (!q) { h.innerHTML = ""; return; }
   const list = P.filter((p) => (label(p) + p.sect + p.note + p.farmer + (p.members || []).join("")).includes(q)).slice(0, 30);
-  h.innerHTML = list.length ? list.map((p) => '<div data-id="' + p.id + '">' + esc(label(p)) + (p.note ? "　" + esc(p.note) : "") + (p.status === "fail" ? "（查無宗界）" : "") + "</div>").join("") : "<div>找不到符合的地號</div>";
+  h.innerHTML = list.length ? list.map((p) => '<div data-id="' + p.id + '">' + esc(label(p)) + (p.note ? "　" + esc(p.note) : "") + (p.status === "fail" ? "（查無宗界）" : "") + (isHidden(p.id) ? "（第" + batchOf[p.id].n + "批，已隱藏）" : "") + "</div>").join("") : "<div>找不到符合的地號</div>";
 };
 $("hits").onclick = (e) => {
   const id = e.target.dataset.id; if (!id) return;
@@ -1400,14 +1443,17 @@ $("btnAuto").onclick = () => autoOrder();
 function drawList() {
   const el = $("listBody");
   if (!P.length) { el.innerHTML = '<div class="empty">尚未匯入巡查包。<br>到「設定與匯出」選擇巡查包_*.json。</div>'; return; }
-  const ids = onlyTodo ? order.filter((id) => !isDone(id)) : order;
-  el.innerHTML = ids.map((id) => {
+  drawBatches();
+  const ids = order.filter((id) => !isHidden(id) && (!onlyTodo || !isDone(id)));
+  const hid = order.filter(isHidden).length;
+  el.innerHTML = (hid ? '<div class="hidnote">已隱藏 ' + hid + " 筆（在上方批次按「顯示」可叫回）</div>" : "") + ids.map((id) => {
     const p = byId[id], i = order.indexOf(id);
-    const badge = isDone(id) ? '<span class="badge d">已巡查</span>' : p.status === "fail" ? '<span class="badge f">查無宗界</span>' : id === curId ? '<span class="badge n">下一站</span>' : "";
+    const badge = isDone(id) && batchOf[id] ? '<span class="badge b" style="background:' + batchColor(batchOf[id]) + '">第' + batchOf[id].n + "批</span>"
+      : isDone(id) ? '<span class="badge d">已巡查</span>' : p.status === "fail" ? '<span class="badge f">查無宗界</span>' : id === curId ? '<span class="badge n">下一站</span>' : "";
     return '<div class="item" data-id="' + id + '"><div class="no">' + (i + 1) + '</div><div class="tx"><div class="t">' + esc(label(p)) + badge + "</div>"
       + '<div class="s">' + esc([p.note, p.farmer, PH[id] ? "照片 " + PH[id] + " 張" : "", p.msg].filter(Boolean).join("　·　")) + "</div></div>"
       + '<div class="mv"><button data-mv="-1">▲</button><button data-mv="1">▼</button></div></div>';
-  }).join("") || '<div class="empty">全部都巡查完了。</div>';
+  }).join("") + (ids.length ? "" : '<div class="empty">全部都巡查完了。</div>');
 }
 $("listBody").onclick = (e) => {
   const it = e.target.closest(".item"); if (!it) return;
@@ -1424,6 +1470,51 @@ $("listBody").onclick = (e) => {
   if (!shapes[id]) { toast("這筆查無宗界，地圖上沒有位置：" + (byId[id].msg || "")); return; }
   focusParcel(id); openSheet(id);
 };
+
+/* ---------- 分批隱藏 ----------
+   巡查天數多時，每天收工把當天已巡查的收成一批並從地圖隱藏；批次編號保留，
+   之後可個別顯示確認、補備註，PDF／Excel 也會標出批次，方便看出每天的進度。 */
+function indexBatches() {
+  batchOf = {};
+  BATCH.forEach((b) => b.ids.forEach((id) => (batchOf[id] = b)));
+}
+async function saveBatches() { indexBatches(); await kvSet("batches", BATCH); }
+async function leaveBatch(id) {
+  const b = batchOf[id]; if (!b) return;
+  b.ids = b.ids.filter((x) => x !== id);
+  if (!b.ids.length) BATCH = BATCH.filter((x) => x !== b);
+  await saveBatches();
+}
+function unbatchedDone() { return order.filter((id) => isDone(id) && !batchOf[id]); }
+function drawBatches() {
+  const n = unbatchedDone().length, k = BATCH.reduce((a, b) => Math.max(a, b.n), 0) + 1;
+  $("btnBatch").textContent = n ? "把已巡查的 " + n + " 筆收成第 " + k + " 批並隱藏" : "目前沒有未分批的已巡查土地";
+  $("btnBatch").disabled = !n;
+  $("batchList").innerHTML = BATCH.length ? '<div style="margin-top:10px">' + BATCH.map((b) =>
+    '<div class="batch" data-n="' + b.n + '"><span class="sw" style="background:' + batchColor(b) + '"></span>'
+    + '<div class="tx">第 ' + b.n + " 批　" + b.ids.length + " 筆<small>" + fmtTime(b.at) + " 收成" + (b.hidden ? "・已隱藏" : "・顯示中") + "</small></div>"
+    + '<button data-act="toggle" class="' + (b.hidden ? "" : "on") + '">' + (b.hidden ? "顯示" : "隱藏") + "</button>"
+    + '<button data-act="undo" class="x">解散</button></div>').join("") + "</div>" : "";
+}
+$("btnBatch").onclick = async () => {
+  const ids = unbatchedDone(); if (!ids.length) return;
+  const n = BATCH.reduce((a, b) => Math.max(a, b.n), 0) + 1;
+  BATCH.push({ n, at: Date.now(), ids, hidden: true });
+  await saveBatches(); pickNext(); refreshAll(); drawList();
+  toast("已收成第 " + n + " 批（" + ids.length + " 筆）並隱藏");
+};
+$("batchList").onclick = async (e) => {
+  const act = e.target.dataset.act; if (!act) return;
+  const b = BATCH.find((x) => x.n === Number(e.target.closest(".batch").dataset.n)); if (!b) return;
+  if (act === "toggle") b.hidden = !b.hidden;
+  else if (act === "undo") {
+    if (!confirm("解散第 " + b.n + " 批？這 " + b.ids.length + " 筆仍是已巡查，只是不再分批，會重新顯示在地圖上。")) return;
+    BATCH = BATCH.filter((x) => x !== b);
+  }
+  await saveBatches(); refreshAll(); drawList();
+};
+$("fabBatch").onclick = () => openPanel("pList");
+$("progress").onclick = () => { if (P.length) openPanel("pList"); };
 
 function drawSet() {
   $("pkgInfo").textContent = pkgMeta ? "目前：" + pkgMeta.source + "（" + P.length + " 筆，" + pkgMeta.created.replace("T", " ") + " 產生）" : "目前沒有巡查包";
@@ -1445,6 +1536,7 @@ $("fPkg").onchange = async (e) => {
   await kvSet("pkg", pkg);
   await kvSet("order", pkg.parcels.map((p) => p.id));
   await kvSet("cur", null);
+  await kvSet("batches", []);
   await load();
   busy("");
   $("pSet").classList.remove("on");
@@ -1457,7 +1549,7 @@ $("btnWipe").onclick = async () => {
   if (!confirm("清除全部巡查標記、備註與照片？不可復原。")) return;
   await tx("state", "readwrite", (s) => s.clear());
   await tx("photos", "readwrite", (s) => s.clear());
-  ST = {}; PH = {}; pickNext(); refreshAll(); drawSet();
+  ST = {}; PH = {}; BATCH = []; await saveBatches(); pickNext(); refreshAll(); drawSet();
   toast("已清除");
 };
 
@@ -1465,6 +1557,12 @@ $("btnWipe").onclick = async () => {
    每頁先畫在 A4 canvas（150dpi，1240×1754），轉 JPEG 後直接嵌入 PDF，
    因此不必在 PDF 內嵌中文字型。 */
 const PW = 1240, PHt = 1754;
+let OPT = { time: true, pos: true, note: true };
+try { Object.assign(OPT, JSON.parse(localStorage.getItem("patrolPdfOpt") || "{}")); } catch (e) {}
+[["optTime", "time"], ["optPos", "pos"], ["optNote", "note"]].forEach(([el, k]) => {
+  $(el).checked = OPT[k];
+  $(el).onchange = () => { OPT[k] = $(el).checked; try { localStorage.setItem("patrolPdfOpt", JSON.stringify(OPT)); } catch (e) {} };
+});
 function loadImg(src) {
   return new Promise((ok) => { const i = new Image(); i.crossOrigin = "anonymous"; i.onload = () => ok(i); i.onerror = () => ok(null); i.src = src; });
 }
@@ -1483,9 +1581,11 @@ async function mapSnapshot(p, st, W, H) {
   const ctr = px((b[0] + b[2]) / 2, (b[1] + b[3]) / 2, z);
   const ox = ctr[0] - W / 2, oy = ctr[1] - H / 2;
   const jobs = [];
-  for (let tx = Math.floor(ox / 256); tx <= Math.floor((ox + W) / 256); tx++)
-    for (let ty = Math.floor(oy / 256); ty <= Math.floor((oy + H) / 256); ty++)
-      jobs.push(loadImg((baseName === "航照" ? "https://wmts.nlsc.gov.tw/wmts/PHOTO2/default/GoogleMapsCompatible/{z}/{y}/{x}" : ESRI).replace("{z}", z).replace("{y}", ty).replace("{x}", tx)).then((im) => im && g.drawImage(im, tx * 256 - ox, ty * 256 - oy)));
+  // 底圖沒有這麼細的層級時，抓較粗的圖磚放大貼上
+  const nlsc = baseName === "航照", tz = nlsc ? z : Math.min(z, ESRI_MAXZ), k = 2 ** (z - tz), ts = 256 * k;
+  for (let tx = Math.floor(ox / ts); tx <= Math.floor((ox + W) / ts); tx++)
+    for (let ty = Math.floor(oy / ts); ty <= Math.floor((oy + H) / ts); ty++)
+      jobs.push(loadImg((nlsc ? "https://wmts.nlsc.gov.tw/wmts/PHOTO2/default/GoogleMapsCompatible/{z}/{y}/{x}" : ESRI).replace("{z}", tz).replace("{y}", ty).replace("{x}", tx)).then((im) => im && g.drawImage(im, tx * ts - ox, ty * ts - oy, ts, ts)));
   await Promise.all(jobs);
   if (kind === "pond") {               // 疊上周邊魚塭邊界
     const res = (2 * 20037508.342789244) / (256 * 2 ** z), o = 20037508.342789244;
@@ -1505,7 +1605,7 @@ async function mapSnapshot(p, st, W, H) {
   g.fillStyle = "#fff"; roundRect(g, q[0] - tw / 2 - 14, q[1] - 24, tw + 28, 48, 14); g.fill();
   g.fillStyle = "#5CA000"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(t, q[0], q[1] + 1);
   // 巡查位置
-  if (st && st.lat) {
+  if (st && st.lat && OPT.pos) {
     const m = toC([st.lat, st.lng]);
     g.beginPath(); g.arc(m[0], m[1], 13, 0, 7); g.fillStyle = "#1A73E8"; g.fill(); g.lineWidth = 5; g.strokeStyle = "#fff"; g.stroke();
   }
@@ -1554,13 +1654,14 @@ async function summaryPages(list) {
       "共 " + P.length + " 筆，已巡查 " + done + " 筆，照片 " + Object.values(PH).reduce((a, b) => a + b, 0) + " 張",
     ], "總表 " + (s / rowsPer + 1));
     y += 10;
-    const cols = [[M, "序"], [M + 60, kind === "pond" ? "魚塭" : "地段／地號"], [M + 430, kind === "pond" ? "經營者／案號" : "業者／備註"], [M + 730, "狀態"], [M + 840, "巡查時間"], [M + 1040, "照片"]];
+    const cols = [[M, "序"], [M + 60, kind === "pond" ? "魚塭" : "地段／地號"], [M + 430, kind === "pond" ? "經營者／案號" : OPT.note ? "業者／備註" : "業者"], [M + 730, "狀態"], [M + 840, OPT.time ? "巡查時間" : ""], [M + 1040, "照片"]];
     g.fillStyle = "#EEF1EC"; g.fillRect(M, y - 30, PW - 2 * M, 42);
     g.fillStyle = "#222"; g.font = "600 22px sans-serif"; cols.forEach(([x, t]) => g.fillText(t, x + 6, y));
     y += 44; g.font = "21px sans-serif";
     list.slice(s, s + rowsPer).forEach((p, k) => {
       const st = ST[p.id] || {};
-      const vals = [String(s + k + 1), label(p), p.pondNo ? p.owner + "　" + p.caseNo : p.note || p.farmer || "", st.visited ? "已巡查" : p.status === "fail" ? "查無宗界" : "未巡查", st.visited ? fmtTime(st.at) : "", String(PH[p.id] || 0)];
+      const vals = [String(s + k + 1), label(p), p.pondNo ? p.owner + "　" + p.caseNo : (OPT.note && p.note) || p.farmer || "",
+        st.visited ? (batchOf[p.id] ? "第" + batchOf[p.id].n + "批" : "已巡查") : p.status === "fail" ? "查無宗界" : "未巡查", st.visited && OPT.time ? fmtTime(st.at) : "", String(PH[p.id] || 0)];
       g.fillStyle = st.visited ? "#222" : "#999";
       cols.forEach(([x], i) => { let v = vals[i]; const max = (cols[i + 1] ? cols[i + 1][0] : PW - M) - x - 12; while (g.measureText(v).width > max && v.length > 1) v = v.slice(0, -2) + "…"; g.fillText(v, x + 6, y); });
       g.strokeStyle = "#E3E6E1"; g.beginPath(); g.moveTo(M, y + 12); g.lineTo(PW - M, y + 12); g.stroke();
@@ -1581,10 +1682,11 @@ async function parcelPages(p, idx) {
   for (let pg = 0; pg < total; pg++) {
     const [c, g] = newPage();
     const info = pg ? [] : [
-      p.county + p.town + "　" + label(p) + (p.note ? "　·　" + p.note : "") + (p.farmer ? "　·　" + p.farmer : ""),
+      p.county + p.town + "　" + label(p) + (p.note && OPT.note ? "　·　" + p.note : "") + (p.farmer ? "　·　" + p.farmer : ""),
       p.pondNo ? pondInfo(p) : "",
-      st.visited ? "巡查：" + fmtTime(st.at) + (st.lat ? "　GPS " + st.lat.toFixed(6) + ", " + st.lng.toFixed(6) + "（±" + st.acc + "m）　" + where(p, st) : "　（未記錄 GPS）") : "尚未巡查",
-      st.note ? "備註：" + st.note : "",
+      st.visited ? "巡查：" + (batchOf[p.id] ? "第 " + batchOf[p.id].n + " 批　" : "") + (OPT.time ? fmtTime(st.at) : "已巡查")
+        + (OPT.pos ? (st.lat ? "　GPS " + st.lat.toFixed(6) + ", " + st.lng.toFixed(6) + "（±" + st.acc + "m）　" + where(p, st) : "　（未記錄 GPS）") : "") : "尚未巡查",
+      st.note && OPT.note ? "備註：" + st.note : "",
       p.msg ? "說明：" + p.msg : "",
     ].filter(Boolean);
     const top = pageHeader(g, (idx + 1) + ".  " + label(p), info, (pg + 1) + " / " + total) + 6;
@@ -1661,6 +1763,80 @@ $("btnPdf").onclick = async () => {
   busy("");
 };
 
+/* ---------- Excel 匯出 ----------
+   手寫最小 xlsx（不壓縮的 zip＋inline 字串），不需外部函式庫。數值欄位存成數字，可直接計算。 */
+const CRC_T = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+function crc32(b) { let c = 0xffffffff; for (let i = 0; i < b.length; i++) c = CRC_T[(c ^ b[i]) & 255] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; }
+function zipStore(files) {
+  const enc = new TextEncoder(), parts = [], cen = [];
+  let off = 0;
+  for (const [name, text] of files) {
+    const nm = enc.encode(name), data = enc.encode(text), crc = crc32(data);
+    const h = new DataView(new ArrayBuffer(30));
+    h.setUint32(0, 0x04034b50, true); h.setUint16(4, 20, true); h.setUint16(6, 0x0800, true);
+    h.setUint32(14, crc, true); h.setUint32(18, data.length, true); h.setUint32(22, data.length, true); h.setUint16(26, nm.length, true);
+    const c = new DataView(new ArrayBuffer(46));
+    c.setUint32(0, 0x02014b50, true); c.setUint16(4, 20, true); c.setUint16(6, 20, true); c.setUint16(8, 0x0800, true);
+    c.setUint32(16, crc, true); c.setUint32(20, data.length, true); c.setUint32(24, data.length, true); c.setUint16(28, nm.length, true); c.setUint32(42, off, true);
+    parts.push(h, nm, data); cen.push(c, nm);
+    off += 30 + nm.length + data.length;
+  }
+  const size = cen.reduce((a, x) => a + x.byteLength, 0);
+  const e = new DataView(new ArrayBuffer(22));
+  e.setUint32(0, 0x06054b50, true); e.setUint16(8, files.length, true); e.setUint16(10, files.length, true); e.setUint32(12, size, true); e.setUint32(16, off, true);
+  return new Blob(parts.concat(cen, [e]), { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+}
+const xesc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])).replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, "");
+function colName(i) { let s = ""; for (i++; i; i = Math.floor((i - 1) / 26)) s = String.fromCharCode(65 + ((i - 1) % 26)) + s; return s; }
+// 欄位值：字串、數字，或 {t: 毫秒時間} 存成 Excel 日期時間
+function xlsxBlob(sheetName, head, rows, widths) {
+  const cell = (v, r, c, s) => {
+    const ref = colName(c) + r;
+    if (v === null || v === undefined || v === "") return "";
+    if (typeof v === "number") return '<c r="' + ref + '"' + (s ? ' s="' + s + '"' : "") + "><v>" + v + "</v></c>";
+    if (v.t) return '<c r="' + ref + '" s="1"><v>' + ((v.t - new Date(v.t).getTimezoneOffset() * 60000) / 86400000 + 25569) + "</v></c>";
+    return '<c r="' + ref + '" t="inlineStr"' + (s ? ' s="' + s + '"' : "") + "><is><t>" + xesc(v) + "</t></is></c>";
+  };
+  const data = ['<row r="1">' + head.map((h, c) => cell(h, 1, c, 2)).join("") + "</row>"]
+    .concat(rows.map((row, i) => '<row r="' + (i + 2) + '">' + row.map((v, c) => cell(v, i + 2, c)).join("") + "</row>"));
+  const sheet = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+    + '<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>'
+    + "<cols>" + widths.map((w, i) => '<col min="' + (i + 1) + '" max="' + (i + 1) + '" width="' + w + '" customWidth="1"/>').join("") + "</cols>"
+    + "<sheetData>" + data.join("") + '</sheetData><autoFilter ref="A1:' + colName(head.length - 1) + (rows.length + 1) + '"/></worksheet>';
+  return zipStore([
+    ["[Content_Types].xml", '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>'],
+    ["_rels/.rels", '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>'],
+    ["xl/workbook.xml", '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="' + xesc(sheetName) + '" sheetId="1" r:id="rId1"/></sheets><definedNames><definedName name="_xlnm._FilterDatabase" localSheetId="0" hidden="1">\'' + xesc(sheetName) + "'!$A$1:$" + colName(head.length - 1) + "$" + (rows.length + 1) + "</definedName></definedNames></workbook>"],
+    ["xl/_rels/workbook.xml.rels", '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>'],
+    ["xl/styles.xml", '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="1"><numFmt numFmtId="164" formatCode="yyyy/mm/dd hh:mm"/></numFmts><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFEEF1EC"/></patternFill></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="3"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>'],
+    ["xl/worksheets/sheet1.xml", sheet],
+  ]);
+}
+$("btnXlsx").onclick = () => {
+  if (!P.length) { toast("尚未匯入巡查包"); return; }
+  const all = document.querySelector('input[name="rng"]:checked').value === "all";
+  const list = order.map((id) => byId[id]).filter((p) => all || isDone(p.id));
+  if (!list.length) { toast("沒有已巡查的土地"); return; }
+  const pond = kind === "pond";
+  const head = ["序", "批次", "狀態"].concat(pond ? ["縣市", "鄉鎮市區", "魚塭編號", "經營者", "案號", "面積(公頃)", "品項", "成員", "地段", "地號"] : ["縣市", "鄉鎮市區", "地段", "地號", "農民名稱", "匯入備註"])
+    .concat(["巡查時間", "緯度", "經度", "定位誤差(公尺)", "距中心(公尺)", pond ? "位於魚塭內" : "位於宗地內", "照片數", "巡查備註", "查詢說明"]);
+  const widths = [6, 7, 9].concat(pond ? [8, 10, 10, 12, 16, 10, 12, 24, 12, 11] : [8, 10, 14, 11, 12, 16]).concat([17, 11, 11, 9, 10, 10, 7, 30, 30]);
+  const rows = list.map((p, i) => {
+    const st = ST[p.id] || {}, b = batchOf[p.id], pos = st.visited && st.lat != null;
+    const num = (v) => (v === "" || v == null || isNaN(Number(v)) ? v || "" : Number(v));
+    return [i + 1, b ? b.n : "", st.visited ? "已巡查" : p.status === "fail" ? "查無宗界" : "未巡查"]
+      .concat(pond ? [p.county, p.town, p.pondNo, p.owner || "", p.caseNo || "", num(p.area), p.fish || "", (p.members || []).join("、"), p.sect || "", p.landno || ""]
+        : [p.county, p.town, p.sectUsed || p.sect, p.landno, p.farmer || "", p.note || ""])
+      .concat([st.visited && st.at ? { t: st.at } : "", pos ? +st.lat.toFixed(6) : "", pos ? +st.lng.toFixed(6) : "", pos && st.acc != null ? Math.round(st.acc) : "",
+        pos && p.center ? Math.round(haversine([st.lat, st.lng], p.center)) : "", pos && p.center ? (inside(p, [st.lat, st.lng]) ? "是" : "否") : "",
+        PH[p.id] || 0, st.note || "", p.msg || ""]);
+  });
+  const d = new Date(), p2 = (n) => String(n).padStart(2, "0");
+  download(xlsxBlob(pond ? "魚塭巡查紀錄" : "田間巡查紀錄", head, rows, widths),
+    (pond ? "魚塭" : "田間") + "巡查紀錄_" + (d.getFullYear() - 1911) + p2(d.getMonth() + 1) + p2(d.getDate()) + "_" + p2(d.getHours()) + p2(d.getMinutes()) + ".xlsx");
+  toast("已產生 Excel（" + rows.length + " 筆）", 4000);
+};
+
 /* ---------- 啟動 ---------- */
 async function load() {
   const pkg = await kvGet("pkg");
@@ -1678,6 +1854,8 @@ async function load() {
   PH = {};
   await tx("photos", "readonly", (s) => { const r = s.index("pid").openKeyCursor(); r.onsuccess = () => { const c = r.result; if (c) { PH[c.key] = (PH[c.key] || 0) + 1; c.continue(); } }; });
   curId = await kvGet("cur");
+  BATCH = ((await kvGet("batches")) || []).map((b) => Object.assign({}, b, { ids: b.ids.filter((id) => byId[id]) })).filter((b) => b.ids.length);
+  indexBatches();
   const b = await kvGet("backup");
   backupOn = b === undefined ? true : !!b;
   $("chkBackup").checked = backupOn;
