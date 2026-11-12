@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#6CB000">
-<title>田間巡查 v0.4.1</title>
+<title>田間巡查 v0.5</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -881,7 +881,7 @@ textarea{width:100%;font:inherit;font-size:15px;border:1.5px solid var(--line);b
 </script>
 <script>
 "use strict";
-const VER = "田間巡查 v0.4.1";
+const VER = "田間巡查 v0.5";
 const POND_URL = "https://scene.moa.gov.tw/portal/sharing/servers/d33f8ec3700c4a2cb520e1911cd59fa6/rest/services/Farm/FishPond/MapServer";
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -938,9 +938,19 @@ const isDone = (id) => !!(ST[id] && ST[id].visited);
 /* ---------- 地圖 ---------- */
 const map = L.map("map", { zoomControl: false, attributionControl: false, maxZoom: 21 }).setView([23.5, 120.9], 8);
 const wmts = (layer, ext) => L.tileLayer("https://wmts.nlsc.gov.tw/wmts/" + layer + "/default/GoogleMapsCompatible/{z}/{y}/{x}", Object.assign({ maxNativeZoom: 19, maxZoom: 21, crossOrigin: true }, ext));
-const BASES = { 航照: wmts("PHOTO2"), 地圖: wmts("EMAP") };
-let baseName = "航照";
+// 國土測繪中心航照部分地區只到 2023 年（新開的道路看不到），預設改用較新的 Esri 衛星影像，航照保留可切換
+const ESRI = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
+const BASES = {
+  衛星: L.tileLayer(ESRI, { maxNativeZoom: 19, maxZoom: 21, crossOrigin: true, attribution: "Esri, Maxar, Earthstar Geographics" }),
+  航照: wmts("PHOTO2", { attribution: "國土測繪中心" }),
+  地圖: wmts("EMAP", { attribution: "國土測繪中心" }),
+};
+const BASE_ORDER = ["衛星", "航照", "地圖"];
+let baseName = "衛星";
+try { if (BASES[localStorage.getItem("patrolBase")]) baseName = localStorage.getItem("patrolBase"); } catch (e) {}
+L.control.attribution({ position: "topright", prefix: false }).addTo(map);
 BASES[baseName].addTo(map);
+$("fabBase").textContent = baseName;
 const sectLayer = wmts("LANDSECT", { minZoom: 15, opacity: 0.85 }).addTo(map);
 // 農業部 114 年魚塭圖（動態輸出，允許跨網域），魚塭模式時取代地籍線
 const FishPondLayer = L.TileLayer.extend({
@@ -1005,9 +1015,10 @@ $("chkLbl").onchange = updateLabelsVisibility;
 
 $("fabBase").onclick = () => {
   map.removeLayer(BASES[baseName]);
-  baseName = baseName === "航照" ? "地圖" : "航照";
+  baseName = BASE_ORDER[(BASE_ORDER.indexOf(baseName) + 1) % BASE_ORDER.length];
   BASES[baseName].addTo(map); BASES[baseName].bringToBack();
   $("fabBase").textContent = baseName;
+  try { localStorage.setItem("patrolBase", baseName); } catch (e) {}
 };
 
 let showRoute = true;
@@ -1474,7 +1485,7 @@ async function mapSnapshot(p, st, W, H) {
   const jobs = [];
   for (let tx = Math.floor(ox / 256); tx <= Math.floor((ox + W) / 256); tx++)
     for (let ty = Math.floor(oy / 256); ty <= Math.floor((oy + H) / 256); ty++)
-      jobs.push(loadImg("https://wmts.nlsc.gov.tw/wmts/PHOTO2/default/GoogleMapsCompatible/" + z + "/" + ty + "/" + tx).then((im) => im && g.drawImage(im, tx * 256 - ox, ty * 256 - oy)));
+      jobs.push(loadImg((baseName === "航照" ? "https://wmts.nlsc.gov.tw/wmts/PHOTO2/default/GoogleMapsCompatible/{z}/{y}/{x}" : ESRI).replace("{z}", z).replace("{y}", ty).replace("{x}", tx)).then((im) => im && g.drawImage(im, tx * 256 - ox, ty * 256 - oy)));
   await Promise.all(jobs);
   if (kind === "pond") {               // 疊上周邊魚塭邊界
     const res = (2 * 20037508.342789244) / (256 * 2 ** z), o = 20037508.342789244;
